@@ -11,22 +11,29 @@
 
 @desc:
 '''
-
+import json
+import torch
+import mmap
 import numpy as np
+from tqdm import tqdm
+from utils import Constants
+from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
 
 from utils.Dict import Dict
 
 
 class KWDataSet(Dataset):
-    def __init__(self, file_path, voc_path):
-        pass
+    def __init__(self, file_path):
+        self.data = open(file_path, 'r').readlines()
 
     def __len__(self):
-        pass
+        return len(self.data)
 
-    def __getitem__(self, item):
-        pass
+    def __getitem__(self, idx):
+        items = self.data[idx].strip("\n").split("\t")
+        kws = items[4][1:-1].replace("\"", "")
+        return KWSample(items[-1], items[-1], kws, items[0]).__dict__
 
 
 class KWSample(object):
@@ -40,8 +47,96 @@ class KWSample(object):
 
 
 class Process(object):
-    def __init__(self, word2idx):
+    def __init__(self, word2idx, cate2idx, cuda=True):
         self.dict = Dict(word2idx)
+        self.cate = Dict(cate2idx)
+        self.cuda = torch.cuda.is_available() if cuda else False
 
-    def transform(self, sample):
-        pass
+    def transform(self, sample, return_variable=True):
+        docs = [doc.split() for doc in samples['doc']]
+        v_docs = self.toTensor(docs)
+
+        titles = [title.split() for title in samples['title']]
+        v_titles = self.toTensor(titles)
+
+        kws = [kw.split(",") for kw in samples['kws']]
+        v_kws = self.toTensor(kws)
+
+        v_topics = self.onehot(samples['topic'])
+
+        if return_variable:
+            v_docs, v_titles,v_kws,v_topics = Variable(v_docs), Variable(v_titles),Variable(v_kws),Variable(v_topics)
+
+        return self.wrapper(v_docs), self.wrapper(v_titles), self.wrapper(v_kws), self.wrapper(v_topics)
+
+    def pad(self, input):
+        max_len = max([len(seq) for seq in input])
+        output = [seq + [Constants.PAD_WORD] * (max_len - len(seq)) for seq in input]
+
+        return output
+
+    def toTensor(self, input):
+        input = self.pad(input)
+        long_tensor = torch.stack([self.dict.convert2idx(seq) for seq in input], dim=0)
+        return long_tensor
+
+    def onehot(self, label):
+        output = np.zeros((len(label), self.cate.size()))
+        for i, lbl in enumerate(label):
+            output[i][self.cate.getIdx(lbl)] = 1
+
+        return torch.LongTensor(output)
+
+    def wrapper(self, input):
+        return input.cuda() if self.cuda else input
+
+
+def build_vocab(file_path):
+    vocab = set()
+    cate = []
+    with open(file_path,'r') as f:
+        for line in tqdm(f, total=get_num_lines(file_path)):
+            items = line.strip("\n").split("\t")
+            vocab |= set(items[-1].split())
+            cate.append(items[0])
+
+        word2idx = dict(zip(vocab, range(1, len(vocab)+1)))
+        word2idx[Constants.PAD_WORD] = 0
+        word2idx[Constants.UNK_WORD] = len(word2idx) + 1
+
+        cate = set(cate)
+        cate2idx = dict(zip(cate, range(len(cate))))
+
+    with open('../docs/word2idx.json', 'w') as fw, open('../docs/cate2idx.json', 'w') as fc:
+        word2idx = json.dumps(word2idx, ensure_ascii=False, indent=4)
+        fw.write(word2idx)
+
+        cate2idx = json.dumps(cate2idx, ensure_ascii=False, indent=4)
+        fc.write(cate2idx)
+
+
+def get_num_lines(file_path):
+    fp = open(file_path, "r+")
+    buf = mmap.mmap(fp.fileno(), 0)
+    lines = 0
+    while buf.readline():
+        lines += 1
+    fp.close()
+    return lines
+
+
+if __name__ == '__main__':
+    # build_vocab('../docs/0426-topic-kw-ts.txt')
+    # exit()
+    dataset = KWDataSet('../docs/test.txt')
+    word2idx = json.load(open('../docs/word2idx.json', 'r'))
+    cate2idx = json.load(open('../docs/cate2idx.json', 'r'))
+    process = Process(word2idx,cate2idx)
+
+    dataloader = DataLoader(dataset, shuffle=True, batch_size=6, num_workers=1)
+    for i, samples in enumerate(dataloader, 0):
+        print(samples['title'])
+        v_docs, v_titles, v_kws, v_topics = process.transform(samples)
+        print(v_topics, v_kws,)
+        exit()
+

@@ -32,7 +32,7 @@ def sort_batch(data, seq_len):
 def softmax_mask(input, mask, axis=1, epsilon=1e-12):
     shift, _ = torch.max(input, axis, keepdim=True)
     shift = shift.expand_as(input)
-    print(torch.exp(input-shift), mask)
+
     target_exp = torch.exp(input-shift)*mask.float()
     normalize = torch.sum(target_exp, axis, keepdim=True).expand_as(target_exp)
     softm = target_exp / (normalize + epsilon)
@@ -95,7 +95,6 @@ class AoAKW(nn.Module):
         s_titles, s_titles_len, reverse_titles_idx = sort_batch(titles_input, titles_len)
 
         # embedding
-        print(s_docs,s_titles)
         docs_embedding = pack(self.embedding(s_docs), list(s_docs_len.data), batch_first=True)
         titles_embedding = pack(self.embedding(s_titles), list(s_titles_len.data), batch_first=True)
 
@@ -113,27 +112,20 @@ class AoAKW(nn.Module):
 
         # calculate attention matrix
         dos = docs_outputs
-        print(dos)
         doc_mask = docs_mask.unsqueeze(2)
         tos = torch.transpose(titles_outputs, 1, 2)
-        print(tos)
         title_mask = titles_mask.unsqueeze(2)
 
         M = torch.bmm(dos, tos)
         M_mask = torch.bmm(doc_mask, title_mask.transpose(1, 2))
-        print(M, M_mask)
         alpha = softmax_mask(M, M_mask, axis=1)
         beta = softmax_mask(M, M_mask, axis=2)
 
         sum_beta = torch.sum(beta, dim=1, keepdim=True)
-        print(sum_beta)
         docs_len = docs_len.unsqueeze(1).unsqueeze(2).expand_as(sum_beta)
-        print(docs_len)
         average_beta = sum_beta / docs_len.float()
-        print(average_beta)
         # doc-level attention
         s = torch.bmm(alpha, average_beta.transpose(1, 2))
-        print(s)
 
         # predict keywords
         kws_probs = None
@@ -141,26 +133,21 @@ class AoAKW(nn.Module):
             kws_probs = []
             for i, kws in enumerate(keywords):
                 document = docs_input[i].squeeze()
-                cur_prob = []
+                cur_prob = 1.
                 for j,kw in enumerate(kws):
                     if kw.data[0] == Constants.PAD:continue
                     kw = kws[j].squeeze()
                     pointer = document == kw.expand_as(document)
-                    cur_prob.append(torch.sum(torch.masked_select(s[i].squeeze(), pointer)))
-                print('*****')
-                print(cur_prob)
-                kws_probs.append(sum(cur_prob))
+                    cur_prob *= torch.sum(torch.masked_select(s[i].squeeze(), pointer))
+                kws_probs.append(cur_prob+1e-10)
             kws_probs = torch.cat(kws_probs, 0).squeeze()
-        print(kws_probs)
 
         # predict prob of topic
-        print(docs_outputs, s)
         fc_feature = torch.sum(docs_outputs * s, dim=1)
-        print(fc_feature)
         topic_probs = self.fc(fc_feature)
-        topic_probs = self.softmax(topic_probs)
+        # topic_probs = self.softmax(topic_probs)
 
-        return topic_probs, kws_probs
+        return topic_probs, kws_probs, s
 
 
 if __name__ == '__main__':

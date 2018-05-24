@@ -48,11 +48,11 @@ class KWSample(object):
 
 class Process(object):
     def __init__(self, word2idx, cate2idx, cuda=True):
-        self.dict = Dict(word2idx)
-        self.cate = Dict(cate2idx)
+        self.dict = word2idx
+        self.cate = cate2idx
         self.cuda = torch.cuda.is_available() if cuda else False
 
-    def transform(self, sample, return_variable=True):
+    def transform(self, samples, return_variable=True):
         docs = [doc.split() for doc in samples['doc']]
         v_docs = self.toTensor(docs)
 
@@ -62,10 +62,10 @@ class Process(object):
         kws = [kw.split(",") for kw in samples['kws']]
         v_kws = self.toTensor(kws)
 
-        v_topics = self.onehot(samples['topic'])
+        v_topics = torch.LongTensor([self.cate.getIdx(lbl) for lbl in samples['topic']])
 
         if return_variable:
-            v_docs, v_titles,v_kws,v_topics = Variable(v_docs), Variable(v_titles),Variable(v_kws),Variable(v_topics)
+            v_docs, v_titles,v_kws,v_topics = Variable(v_docs,requires_grad=False), Variable(v_titles,requires_grad=False),Variable(v_kws,requires_grad=False),Variable(v_topics,requires_grad=False)
 
         return self.wrapper(v_docs), self.wrapper(v_titles), self.wrapper(v_kws), self.wrapper(v_topics)
 

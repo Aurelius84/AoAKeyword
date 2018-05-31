@@ -42,7 +42,7 @@ def softmax_mask(input, mask, axis=1, epsilon=1e-12):
 def get_seq_lenth(input, return_variable=True):
     seq_len = torch.LongTensor([torch.nonzero(input.data[i]).size(0) for i in range(input.data.size(0))])
     if return_variable:
-        seq_len = Variable(seq_len)
+        seq_len = Variable(seq_len, requires_grad=True)
 
     return seq_len
 
@@ -52,7 +52,7 @@ def creat_mask(seq_lens, return_variable=True):
     for i, seq_len in enumerate(seq_lens.data):
         mask[i][:seq_len] = 1
     if return_variable:
-        mask = Variable(mask)
+        mask = Variable(mask, requires_grad=True)
     return cuda_wrapper(mask)
 
 
@@ -85,7 +85,6 @@ class AoAKW(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(256, n_class)
         )
-        self.softmax = nn.Softmax(dim=-1)
 
     def forward(self, docs_input, titles_input, keywords=None, topics=None):
         docs_len, titles_len = get_seq_lenth(docs_input), get_seq_lenth(titles_input)
@@ -145,7 +144,6 @@ class AoAKW(nn.Module):
         # predict prob of topic
         fc_feature = torch.sum(docs_outputs * s, dim=1)
         topic_probs = self.fc(fc_feature)
-        # topic_probs = self.softmax(topic_probs)
 
         return topic_probs, kws_probs, s
 
@@ -161,4 +159,5 @@ if __name__ == '__main__':
     vocab = Dict({i:i for i in range(40)})
 
     model = AoAKW(vocab_dict=vocab, dropout_rate=0.2, embed_dim=7, hidden_dim=4, n_class=2)
-    print(model(doc_input, title_input, keywords, topic))
+    for i in range(10):
+        model(doc_input, title_input, keywords, topic)

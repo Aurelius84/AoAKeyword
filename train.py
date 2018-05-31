@@ -14,6 +14,7 @@
 import time
 import json
 import torch
+import shutil
 import torch.nn as nn
 import numpy as np
 import torch.optim as optim
@@ -30,7 +31,8 @@ word2idx = Dict(json.load(open('docs/word2idx.json', 'r')))
 cate2idx = Dict(json.load(open('docs/cate2idx.json', 'r')))
 process = Process(word2idx, cate2idx)
 
-vis = Visualizer(log_dir="runs/%s"%time.strftime("%m-%d-%H:%M:%S", time.localtime()))
+time_stamp = time.strftime("%m-%d-%H:%M:%S", time.localtime())
+vis = Visualizer(log_dir="runs/%s"%time_stamp)
 criterion = nn.CrossEntropyLoss()
 
 def train(train_loader, test_loader):
@@ -40,7 +42,8 @@ def train(train_loader, test_loader):
     # optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-2)
     optimizer = optim.RMSprop(model.parameters(), lr=lr)
 
-    for epoch in range(5):
+    best_kw_acc = 0.
+    for epoch in range(10):
         lg_loss, cr_loss, ls = 0, 0, 0
         for batch_idx, samples in enumerate(train_loader, 0):
             v_docs, v_titles, v_kws, v_topics = process.transform(samples, return_variable=True)
@@ -50,7 +53,7 @@ def train(train_loader, test_loader):
 
             log_loss = - torch.mean(torch.log(kw_probs), dim=0)
             crossEntro = criterion(topic_probs, v_topics)
-            loss = log_loss + crossEntro
+            loss = 1.4 * log_loss + 0.6 * crossEntro
             loss.backward()
             optimizer.step()
 
@@ -58,47 +61,58 @@ def train(train_loader, test_loader):
             cr_loss += crossEntro.data[0]
             ls += loss.data[0]
 
-            if batch_idx % 5 == 0:
+            if batch_idx % 10 == 0:
                 # log loss
                 vis.plot('train/log_loss', lg_loss/10)
                 vis.plot('train/crossEntro', cr_loss/10)
                 vis.plot('train/loss', loss/10)
                 lg_loss, cr_loss, ls = 0, 0, 0
 
-                topic_acc, kw_acc = accuracy(v_kws, atten_s, v_topics, topic_probs, v_docs)
-                vis.plot("train/topic_acc", topic_acc)
-                vis.plot("train/kw_acc", kw_acc)
+                topic_pre_num, topic_gt_num, kw_num_correct, kw_gt_num = acc_num(v_kws, atten_s, v_topics, topic_probs, v_docs)
+                vis.plot("train/topic_acc", float(topic_pre_num)/topic_gt_num)
+                vis.plot("train/kw_acc", float(kw_num_correct)/kw_gt_num)
 
-            if batch_idx % 6 == 0:
-                evalution(model, test_loader)
+            if batch_idx % 100 == 0:
+                kw_acc = evalution(model, test_loader)
                 checkPredict(atten_s, v_docs, v_kws, topic_probs, v_topics)
+
+                if kw_acc > best_kw_acc:
+                    best_kw_acc = kw_acc
+                    save_checkpoint({
+                        'epoch': epoch + 1,
+                        'state_dict': model.state_dict(),
+                        'best_kw_acc': best_kw_acc,
+                        'optimizer': optimizer.state_dict(),
+                    }, False)
+
                 model.train()
 
 
-def accuracy(v_kws, atten_s, v_topics, topic_prob, v_docs):
+def acc_num(v_kws, atten_s, v_topics, topic_prob, v_docs):
     topic_num_correct = v_topics.data == np.argmax(topic_prob.data, axis=1)
-    topic_acc = torch.sum(topic_num_correct) / float(v_topics.size(0))
+    topic_pre_num = torch.sum(topic_num_correct)
+    topic_gt_num = float(v_topics.size(0))
 
     # top 3
     topk, indices = torch.topk(atten_s, 3, dim=1)
     indices_ = indices.data.view(-1, 3).numpy()
     v_docs_ = v_docs.data.numpy()
     kw_num_correct = 0
+    kw_gt_num = 0
 
     for i in range(len(v_docs_)):
         gt_kws = v_kws[i].data.numpy()
         pre_kws = v_docs_[i][indices_[i]]
         kw_num_correct += len(set(gt_kws) & set(pre_kws))
+        kw_gt_num += sum(gt_kws != 0)
 
-    kw_acc = kw_num_correct / float(3*len(v_docs_))
-
-    return topic_acc, kw_acc
+    return topic_pre_num, topic_gt_num, kw_num_correct, kw_gt_num
 
 
 def evalution(model, dataloader):
     model.eval()
     lg_loss, cr_loss, ls = 0, 0, 0
-    t_acc, k_acc = 0, 0
+    topic_pre_num, topic_gt_num, kw_num_correct, kw_gt_num = 0.,0.,0.,0.
     for batch_idx, samples in enumerate(dataloader, 0):
         v_docs, v_titles, v_kws, v_topics = process.transform(samples)
         topic_probs, kw_probs, atten_s = model(v_docs, v_titles, v_kws, v_topics)
@@ -111,15 +125,25 @@ def evalution(model, dataloader):
         cr_loss += crossEntro.data[0]
         ls += loss.data[0]
 
-        topic_acc, kw_acc = accuracy(v_kws, atten_s, v_topics, topic_probs, v_docs)
-        t_acc+= topic_acc
-        k_acc += kw_acc
+        tp_num, tg_num, kp_num, kg_num = acc_num(v_kws, atten_s, v_topics, topic_probs, v_docs)
+        topic_pre_num += tp_num
+        topic_gt_num += tg_num
+        kw_num_correct += kp_num
+        kw_gt_num += kg_num
 
     vis.plot('test/log_loss', lg_loss / batch_idx)
     vis.plot('test/crossEntro', cr_loss / batch_idx)
     vis.plot('test/loss', ls / batch_idx)
-    vis.plot("test/topic_acc", t_acc/batch_idx)
-    vis.plot("test/kw_acc", k_acc/batch_idx)
+    vis.plot("test/topic_acc", topic_pre_num/topic_gt_num)
+    vis.plot("test/kw_acc", kw_num_correct/kw_gt_num)
+
+    return kw_num_correct/kw_gt_num
+
+
+def save_checkpoint(state, is_best, filename='model/%s_checkpoint.pth.tar' % time_stamp):
+    torch.save(state, filename)
+    if is_best:
+        shutil.copyfile(filename, 'model/%s_model_best.pth.tar' % time_stamp)
 
 
 def checkPredict(atten_s, v_docs, v_kws, topic_probs, v_topics, k=5):
@@ -150,6 +174,6 @@ if __name__ =='__main__':
     train_loader = DataLoader(trainset, batch_size=64, shuffle=True, num_workers=4)
 
     testset = KWDataSet('docs/test.txt')
-    test_loader = DataLoader(testset, batch_size=64, shuffle=True, num_workers=4)
+    test_loader = DataLoader(testset, batch_size=64, shuffle=False, num_workers=4)
 
     train(train_loader, test_loader)

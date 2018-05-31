@@ -65,7 +65,7 @@ class Process(object):
         v_topics = torch.LongTensor([self.cate.getIdx(lbl) for lbl in samples['topic']])
 
         if return_variable:
-            v_docs, v_titles,v_kws,v_topics = Variable(v_docs,requires_grad=False), Variable(v_titles,requires_grad=False),Variable(v_kws,requires_grad=False),Variable(v_topics,requires_grad=False)
+            v_docs, v_titles,v_kws,v_topics = Variable(v_docs), Variable(v_titles),Variable(v_kws),Variable(v_topics)
 
         return self.wrapper(v_docs), self.wrapper(v_titles), self.wrapper(v_kws), self.wrapper(v_topics)
 
@@ -100,9 +100,9 @@ def build_vocab(file_path):
             vocab |= set(items[-1].split())
             cate.append(items[0])
 
-        word2idx = dict(zip(vocab, range(1, len(vocab)+1)))
-        word2idx[Constants.PAD_WORD] = 0
-        word2idx[Constants.UNK_WORD] = len(word2idx) + 1
+        word2idx = dict(zip(vocab, range(2, len(vocab)+2)))
+        word2idx[Constants.PAD_WORD] = Constants.PAD
+        word2idx[Constants.UNK_WORD] = Constants.UNK
 
         cate = set(cate)
         cate2idx = dict(zip(cate, range(len(cate))))
@@ -126,8 +126,8 @@ def get_num_lines(file_path):
 
 
 if __name__ == '__main__':
-    # build_vocab('../docs/0426-topic-kw-ts.txt')
-    # exit()
+    build_vocab('../docs/0426-topic-kw-ts.txt')
+    exit()
     dataset = KWDataSet('../docs/test.txt')
     word2idx = json.load(open('../docs/word2idx.json', 'r'))
     cate2idx = json.load(open('../docs/cate2idx.json', 'r'))

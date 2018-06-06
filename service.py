@@ -66,17 +66,17 @@ model = initModel()
 @app.route('/keywords', methods = ['POST'])
 def extractKeywords():
     if request.method == 'POST':
-        # try:
-        title = request.form['title']
-        doc = request.form['doc']
-        
-        # segment
-        v_doc, v_title = dataWrapper(' '.join(jieba.lcut(title)), ' '.join(jieba.lcut(doc)))
-        return response(v_doc, v_title)
-        # except:
-        #     return json.dumps({"status":504,
-        #             "data":[],
-        #             "msg":"title and doc should be formed."})
+        try:
+            title = request.form['title']
+            doc = request.form['doc']
+            
+            # segment
+            v_doc, v_title = dataWrapper(' '.join(jieba.lcut(title)), ' '.join(jieba.lcut(doc)))
+            return response(v_doc, v_title)
+        except:
+            return json.dumps({"status":504,
+                    "data":[],
+                    "msg":"title and doc should be formed."})
     else:
         return json.dumps({"status":404,
                 "data":[],

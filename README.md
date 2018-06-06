@@ -32,11 +32,18 @@ http://127.0.0.1:8089
 # start flask service with gevent in ENV
 nohup python service.py &
 
+# use Postman (chrome plugin) to visit:
+http://127.0.0.1:5000/keywords
+
+# if you just want to test, please visit:
+http://10.232.22.243:5000/keywords
+
 # only support post with form data
-# form data as followed:
+# make sure that form data as followed:
 {
-    "title": "This is a title",
-    "doc": "This is doc string"}
+    "title": "This is a title", (required)
+    "doc": "This is doc string" (required)
+}
 
 # response data
 {

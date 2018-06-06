@@ -59,10 +59,13 @@ class Process(object):
         titles = [title.split() for title in samples['title']]
         v_titles = self.toTensor(titles)
 
-        kws = [kw.split(",") for kw in samples['kws']]
-        v_kws = self.toTensor(kws)
+        v_kws, v_topics = torch.zeros([1]),torch.zeros([1])
+        if samples['kws'] is not None:
+            kws = [kw.split(",") for kw in samples['kws']]
+            v_kws = self.toTensor(kws)
 
-        v_topics = torch.LongTensor([self.cate.getIdx(lbl) for lbl in samples['topic']])
+        if samples['topic'] is not None:
+            v_topics = torch.LongTensor([self.cate.getIdx(lbl) for lbl in samples['topic']])
 
         if return_variable:
             v_docs, v_titles,v_kws,v_topics = Variable(v_docs), Variable(v_titles),Variable(v_kws),Variable(v_topics)

@@ -69,7 +69,7 @@ def train(train_loader, test_loader):
                 lg_loss, cr_loss, ls = 0, 0, 0
 
                 topic_pre_num, topic_gt_num, kw_num_correct, kw_gt_num = acc_num(
-                    v_kws, atten_s, v_toptics, topic_probs, v_docs)
+                    v_kws, atten_s, v_topics, topic_probs, v_docs)
                 vis.plot("train/topic_acc", float(topic_pre_num)/topic_gt_num)
                 vis.plot("train/kw_acc", float(kw_num_correct)/kw_gt_num)
 

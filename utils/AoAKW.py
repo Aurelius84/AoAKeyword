@@ -74,7 +74,8 @@ class AoAKW(nn.Module):
         self.embedding.weight.data.uniform_(-0.05, 0.05)
 
         input_size = self.embed_dim
-        self.gru = nn.GRU(input_size, hidden_size=self.hidden_dim, dropout=dropout_rate, bidirectional=bidirectional, batch_first=True)
+        self.gru = nn.GRU(input_size, hidden_size=self.hidden_dim, dropout=dropout_rate,
+                          bidirectional=bidirectional, batch_first=True)
 
         for weight in self.gru.parameters():
             if len(weight.size()) > 1:
